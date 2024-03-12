@@ -37,17 +37,16 @@ def main():
   encoder = ffio.FFIO( o_path, mode=ffio.FFIOMode.ENCODE, hw_enabled=True, codec_params=params)
   decoder = ffio.FFIO( i_path, mode=ffio.FFIOMode.DECODE, hw_enabled=True)
 
-  if decoder.ffio_state and encoder.ffio_state:
+  if decoder and encoder:
     time_total = 0
     idx        = 0
     while idx < 100:
       time_before = time.time()
-      frame = decoder.decode_one_frame(image_format='numpy')
-      if type(frame) is np.ndarray:
-        # The frame returned is read-only, so make a copy if you need to modify its contents.
-        # If you don't want to do this, try to follow the examples with using shared memory.
-        frame = _draw(frame.copy(), idx)
-        if encoder.encode_one_frame(frame):
+      if frame := decoder.decode_one_frame(sei_filter="ffio"):
+        if frame.sei_msg:
+          print(f"sei: {frame.sei_msg.decode()}")
+        frame = _draw(frame.as_numpy(), idx)
+        if encoder.encode_one_frame(frame, sei_msg=f"[{idx}] ffio sei msg."):
           dt          = time.time() - time_before
           time_total += dt
           idx        += 1
@@ -55,6 +54,9 @@ def main():
           fps         = 1000 / avg
           print(f"{idx}: dt:{dt * 1000:.2f}ms, avg:{avg:.2f}ms, {fps:.2f}fps, "
                 f"total: {time_total:.2f}s, shape:{frame.shape}")
+      else:
+        print(f"decode error: {frame.err}.")
+        break
 
     # Attention !!
     # Force quitting this script will result in a memory leak.
